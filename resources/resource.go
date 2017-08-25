@@ -96,7 +96,7 @@ func (t Resource) tags() string {
 
 func (t Resource) Write(folder string) {
 	//string(filepath.Separator)
-	file_name := filepath.Join(folder, t.Name, "_spec.rb")
+	file_name := filepath.Join(folder, t.Name + "_spec.rb")
 	data := []byte(t.String())
 	err := ioutil.WriteFile(file_name, data, 0644)
 	if err != nil {
