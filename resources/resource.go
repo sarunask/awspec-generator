@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/tidwall/gjson"
 	"strings"
-	//"path/filepath"
-	"os"
 	"log"
+	"path/filepath"
+	"io/ioutil"
 )
 
 type Type int
@@ -96,19 +96,12 @@ func (t Resource) tags() string {
 
 func (t Resource) Write(folder string) {
 	//string(filepath.Separator)
-	file_name := fmt.Sprintf("%v/%v_spec.rb", folder,t.Name)
-	log.Println("Opening ", file_name)
-	file, err := os.Open(file_name)
-	log.Println("Opened ", file_name)
+	file_name := filepath.Join(folder, t.Name, "_spec.rb")
+	data := []byte(t.String())
+	err := ioutil.WriteFile(file_name, data, 0644)
 	if err != nil {
-		log.Println("Error opening file for writing: ", file_name)
+		log.Println("Error writing to file: ", filepath.ToSlash(file_name))
 	}
-	defer file.Close()
-	_, err = file.WriteString(t.String())
-	if err != nil {
-		log.Println("Error writing file ", file_name)
-	}
-	file.Sync()
 }
 
 //Parse would take gjson Resource and would parse it into structure Resource
