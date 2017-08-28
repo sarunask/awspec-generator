@@ -7,6 +7,7 @@ import (
 	"github.com/sarunask/awspec-generator/loggers"
 	"os"
 	"io"
+	"path/filepath"
 )
 
 type Type int
@@ -95,17 +96,19 @@ func (t Resource) tags() string {
 }
 
 func (t Resource) Write(folder string) {
-	//string(filepath.Separator)
-	//file_name := filepath.Join(folder, t.Name + "_spec.rb")
-	file_name := t.Name + "_spec.rb"
+	file_name := filepath.Join(folder, t.Name + "_spec.rb")
+	str := t.String()
 	file, err := os.OpenFile(file_name, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		loggers.Error.Println("Error opening file " + file_name)
+		loggers.Trace.Println("Error opening file " + file_name)
+		loggers.Error.Println(err)
 	}
 	defer file.Close()
-	_, err = io.WriteString(file, t.String())
+	loggers.Info.Println(str)
+	_, err = io.WriteString(file, str)
 	if err != nil {
-		loggers.Error.Println("Error writing to file: ", file_name)
+		loggers.Trace.Println("Error writing to file: ", file_name)
+		loggers.Error.Println(err)
 	}
 	file.Sync()
 }
