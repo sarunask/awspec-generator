@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/tidwall/gjson"
 	"strings"
-	"log"
-	"path/filepath"
-	"io/ioutil"
+	"github.com/sarunask/awspec-generator/loggers"
+	"os"
+	"io"
 )
 
 type Type int
@@ -96,12 +96,18 @@ func (t Resource) tags() string {
 
 func (t Resource) Write(folder string) {
 	//string(filepath.Separator)
-	file_name := filepath.Join(folder, t.Name + "_spec.rb")
-	data := []byte(t.String())
-	err := ioutil.WriteFile(file_name, data, 0644)
+	//file_name := filepath.Join(folder, t.Name + "_spec.rb")
+	file_name := t.Name + "_spec.rb"
+	file, err := os.OpenFile(file_name, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Println("Error writing to file: ", filepath.ToSlash(file_name))
+		loggers.Error.Println("Error opening file " + file_name)
 	}
+	defer file.Close()
+	_, err = io.WriteString(file, t.String())
+	if err != nil {
+		loggers.Error.Println("Error writing to file: ", file_name)
+	}
+	file.Sync()
 }
 
 //Parse would take gjson Resource and would parse it into structure Resource

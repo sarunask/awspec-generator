@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"os"
-	"log"
 	"io/ioutil"
 	"github.com/tidwall/gjson"
 	"github.com/sarunask/awspec-generator/resources"
+	"github.com/sarunask/awspec-generator/loggers"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 )
 
 func exit_with_message(msg string, code int) {
-	log.Println(msg)
+	loggers.Error.Println(msg)
 	os.Exit(code)
 }
 
@@ -40,13 +40,13 @@ func read_terraform_status(status_file string) {
 	//Would send resource for further parsing to parse_resource func
 	status_json_bytes, err := ioutil.ReadFile(status_file)
 	if err != nil {
-		log.Printf("Error reading file %v\n", status_file)
+		loggers.Error.Printf("Error reading file %v\n", status_file)
 		return
 	}
 	status_json_string := string(status_json_bytes)
 	ress := gjson.Get(status_json_string, "modules.#.resources")
 	if !ress.Exists() {
-		log.Println("Resources are not present in JSON.")
+		loggers.Error.Println("Resources are not present in JSON.")
 		return
 	}
 	var ch_resources chan resources.Resource
@@ -71,8 +71,14 @@ func create_spec_dir() {
 			//Other error
 			exit_with_message("Error getting stats for spec directory", 2)
 		}
-	} else if ! stat.IsDir() {
-		exit_with_message("spec file exists and is not a directory", 3)
+	} else {
+		mode := stat.Mode()
+		if ! stat.IsDir() {
+			exit_with_message("spec file exists and is not a directory", 3)
+		}
+		if (mode & 0700) != 0700 {
+			exit_with_message("spec directory permissions do not allow writing "+string(mode), 3)
+		}
 	}
 }
 
@@ -81,6 +87,7 @@ func main() {
 	flag.StringVar(&json_file, "json_file", "",
 		"Path to Terraform JSON status file to parse")
 	flag.Parse()
+	loggers.Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 	if json_file == "" {
 		exit_with_message("Usage: awspec-generator -json_file json_file_path\nSee more with -h", 1)
 	}
