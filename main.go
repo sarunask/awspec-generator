@@ -7,6 +7,7 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/sarunask/awspec-generator/resources"
 	"github.com/sarunask/awspec-generator/loggers"
+	"runtime"
 )
 
 const (
@@ -83,6 +84,7 @@ func create_spec_dir() {
 }
 
 func main() {
+	runtime.GOMAXPROCS(4)
 	var json_file string
 	flag.StringVar(&json_file, "json_file", "",
 		"Path to Terraform JSON status file to parse")
