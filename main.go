@@ -7,7 +7,10 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/sarunask/awspec-generator/resources"
 	"github.com/sarunask/awspec-generator/loggers"
+	"sync"
 )
+
+var wg sync.WaitGroup
 
 const (
 	SPEC_DIR = "spec"
@@ -28,6 +31,13 @@ func parse_resource(resource *gjson.Result, c chan resources.Resource) {
 	})
 }
 
+func writer(c chan resources.Resource) {
+	defer wg.Done()
+	for res := range c {
+		res.Write(SPEC_DIR)
+	}
+}
+
 func read_terraform_status(status_file string) {
 	//Func will read file with name status_file
 	//It would search for any resources in modules array
@@ -45,6 +55,9 @@ func read_terraform_status(status_file string) {
 	}
 	var ch_resources chan resources.Resource
 	ch_resources = make(chan resources.Resource)
+	//Out writer routine
+	wg.Add(1)
+	go writer(ch_resources)
 	ress.ForEach(func(key, value gjson.Result) bool {
 		if value.String() != "{}" {
 			parse_resource(&value, ch_resources)
@@ -52,9 +65,6 @@ func read_terraform_status(status_file string) {
 		return true
 	})
 	close(ch_resources)
-	for res := range ch_resources {
-		res.Write(SPEC_DIR)
-	}
 }
 
 func create_spec_dir() {
@@ -89,4 +99,5 @@ func main() {
 	}
 	create_spec_dir()
 	read_terraform_status(json_file)
+	wg.Wait()
 }
