@@ -11,7 +11,7 @@ import (
 )
 
 var wg sync.WaitGroup
-var tree *resources.ResourcesTree
+var tree *resources.Tree
 
 const (
 	SPEC_DIR = "spec"
@@ -106,7 +106,7 @@ func main() {
 		exit_with_message("Usage: awspec-generator -json_file json_file_path\nSee more with -h", 1)
 	}
 	create_spec_dir()
-	tree = new(resources.ResourcesTree)
+	tree = new(resources.Tree)
 	read_terraform_status(json_file)
 	wg.Wait()
 	make_dependencies()
