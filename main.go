@@ -11,6 +11,7 @@ import (
 )
 
 var wg sync.WaitGroup
+var tree *resources.ResourcesTree
 
 const (
 	SPEC_DIR = "spec"
@@ -21,20 +22,31 @@ func exit_with_message(msg string, code int) {
 	os.Exit(code)
 }
 
-func parse_resource(resource *gjson.Result, c chan resources.Resource) {
+func parse_resource(resource *gjson.Result) {
+	defer wg.Done()
 	resource.ForEach(func(key, value gjson.Result) bool {
 		resource := resources.Parse(&value)
+		resource.TerraformName = key.String()
 		if resource.Type != resources.Unknown {
-			c <- resource
+			tree.Push(&resource)
 		}
 		return true
 	})
 }
 
-func writer(c chan resources.Resource) {
-	defer wg.Done()
-	for res := range c {
-		res.Write(SPEC_DIR)
+func make_dependencies() {
+	loggers.Info.Printf("Tree length is %v\n", len(tree.Tree))
+	for key, value := range tree.Tree {
+		dependencies := gjson.Get(value.Raw, "depends_on").Array()
+		if dependencies == nil {
+			continue
+		}
+		for i := range dependencies {
+			res, ok := tree.Tree[dependencies[i].String()]
+			if ok != false {
+				tree.Tree[key].AddDependency(res)
+			}
+		}
 	}
 }
 
@@ -53,18 +65,14 @@ func read_terraform_status(status_file string) {
 		loggers.Error.Println("Resources are not present in JSON.")
 		return
 	}
-	var ch_resources chan resources.Resource
-	ch_resources = make(chan resources.Resource)
 	//Out writer routine
-	wg.Add(1)
-	go writer(ch_resources)
 	ress.ForEach(func(key, value gjson.Result) bool {
 		if value.String() != "{}" {
-			parse_resource(&value, ch_resources)
+			wg.Add(1)
+			go parse_resource(&value)
 		}
 		return true
 	})
-	close(ch_resources)
 }
 
 func create_spec_dir() {
@@ -98,6 +106,10 @@ func main() {
 		exit_with_message("Usage: awspec-generator -json_file json_file_path\nSee more with -h", 1)
 	}
 	create_spec_dir()
+	tree = new(resources.ResourcesTree)
 	read_terraform_status(json_file)
+	wg.Wait()
+	make_dependencies()
+	tree.Write(SPEC_DIR, &wg)
 	wg.Wait()
 }
