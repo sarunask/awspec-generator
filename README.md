@@ -2,8 +2,8 @@
 
 Version: 0.1.0
 
-Aim of this project to build a tool, which would be able to take Terraform state JSON and output AWSpec infrastructure 
-tests.
+Aim of this project to build a tool, which would be able to take Terraform state JSON and output 
+AWSpec infrastructure tests.
 For now I have implemented such test resources:
 * VPC
 * Subnet
@@ -14,7 +14,7 @@ For now I have implemented such test resources:
 ## Install program
 In order to install program, you would need to Install GO language and setup it as described 
 [here](https://golang.org/doc/install).
-After you install go, you could do from CLI:
+After you install GO, you could do from CLI:
 ```bash
 go get -u github.com/sarunask/awspec-generator
 ```
@@ -36,7 +36,7 @@ awspec-generator -json_file status.json
 ```
 If generation was successful, you would see **./spec** directory with several files. 
 Now you can install [AWSpec](https://github.com/k1LoW/awspec), move generated .rb files and **./addons/ec2_helper.rb** 
-into **spec** directory and run tests.
+into you own **spec** directory and run tests.
 
 **NOTE: I strongly suggest to use [RVM](https://rvm.io/) to install Ruby 2.4 and create gemset for your AWSpec 
 installation.**
