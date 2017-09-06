@@ -36,10 +36,46 @@ func (t *SG_rule) String() (ret string) {
 	return
 }
 
+type ELB_HealthCheck struct {
+	Healthy_Threshold int64
+	Unhealthy_Threshold int64
+	Interval int64
+	Target string
+	Timeout int64
+}
+
+func (t *ELB_HealthCheck) String() (ret string) {
+	if t.Target != "" {
+		ret += fmt.Sprintf("  its(:health_check_target) {should eq '%v'}\n", t.Target)
+	}
+	ret += fmt.Sprintf("  its(:health_check_interval) {should eq %v}\n", t.Interval)
+	ret += fmt.Sprintf("  its(:health_check_timeout) {should eq %v}\n", t.Timeout)
+	ret += fmt.Sprintf("  its(:health_check_unhealthy_threshold) {should eq %v}\n", t.Unhealthy_Threshold)
+	ret += fmt.Sprintf("  its(:health_check_healthy_threshold) {should eq %v}\n", t.Healthy_Threshold)
+	return
+}
+
+type ELB_Listener struct {
+	Instance_port int64
+	Instance_protocol string
+	Lb_port int64
+	Lb_protocol string
+}
+
+func (t *ELB_Listener) String() (ret string) {
+	ret = fmt.Sprintf("  it { should have_listener(protocol: '%v', port: %v, " +
+		"instance_protocol: '%v', instance_port: %v) }\n",
+		strings.ToUpper(t.Lb_protocol),
+		t.Lb_port,
+		strings.ToUpper(t.Instance_protocol),
+		t.Instance_port)
+	return
+}
+
 func (t Resource) aws_vpc_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
-		"describe vpc(\"%v\") do\n"+
+		"describe vpc('%v') do\n"+
 		"  it { should exist }\n" +
 		"  it { should be_available }\n" +
 		t.tags() +
@@ -51,7 +87,7 @@ func (t Resource) aws_vpc_spec() string {
 func (t Resource) aws_subnet_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
-		"describe subnet(\"%v\") do\n"+
+		"describe subnet('%v') do\n"+
 		"  it { should exist }\n" +
 		"  it { should be_available }\n" +
 		t.tags() +
@@ -61,9 +97,9 @@ func (t Resource) aws_subnet_spec() string {
 
 func (t Resource) aws_sg_spec() string {
 	return fmt.Sprintf("require 'awspec'\n\n" +
-		"describe security_group(\"%v\") do\n"+
+		"describe security_group('%v') do\n"+
 		"  it { should exist }\n" +
-	    "  its('group_name') { should eq '%v'}\n" +
+	    "  its('group_name') { should start_with('%v')}\n" +
 		t.tags() +
 	    t.sg_rules() +
 		"end\n", t.Name, t.Name)
@@ -72,7 +108,7 @@ func (t Resource) aws_sg_spec() string {
 func (t Resource) aws_vpn_gw_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
-		"describe vpn_gateway(\"%v\") do\n"+
+		"describe vpn_gateway('%v') do\n"+
 		"  it { should exist }\n" +
 		"  it { should be_available }\n" +
 		"  its(:type) {should eq 'ipsec.1'}\n" +
@@ -85,7 +121,7 @@ func (t Resource) aws_vpn_gw_spec() string {
 func (t Resource) aws_customer_gw_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
-		"describe customer_gateway(\"%v\") do\n"+
+		"describe customer_gateway('%v') do\n"+
 		"  it { should exist }\n" +
 		"  it { should be_available }\n" +
 		"  its(:type) {should eq 'ipsec.1'}\n" +
@@ -97,7 +133,7 @@ func (t Resource) aws_customer_gw_spec() string {
 func (t Resource) aws_vpn_connection_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
-		"describe vpn_connection(\"%v\") do\n"+
+		"describe vpn_connection('%v') do\n"+
 		"  it { should exist }\n" +
 		"  it { should be_available }\n" +
 		"  its(:type) {should eq 'ipsec.1'}\n" +
@@ -106,9 +142,30 @@ func (t Resource) aws_vpn_connection_spec() string {
 		"end\n", t.Name)
 }
 
-func (t Resource) tags() (ret string) {
+//describe elb('rss-non-prod-kapacitor-lb') do
+//it { should exist }
+//its(:load_balancer_name) { should eq 'rss-non-prod-kapacitor-lb' }
+//its(:health_check_target) { should eq 'TCP:9092' }
+//its(:health_check_interval) { should eq 30 }
+//its(:health_check_timeout) { should eq 3 }
+//its(:health_check_unhealthy_threshold) { should eq 2 }
+//its(:health_check_healthy_threshold) { should eq 2 }
+//it { should have_listener(protocol: 'HTTP', port: 9092, instance_protocol: 'HTTP', instance_port: 9092) }
+//end
+
+func (t Resource) aws_elb_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+	    "describe elb('%v') do\n" +
+	    "  it { should exist }\n" +
+		"  its(:load_balancer_name) { should eq '%v' }\n" +
+	    t.elb_attrs() +
+	    "end\n", t.Name, t.Name)
+}
+
+func (t Resource) tags() (tags string) {
 	for key, value := range t.Tags {
-		ret += fmt.Sprintf("  it { should have_tag('%v').value('%v') }\n", key, value)
+		tags += fmt.Sprintf("  it { should have_tag('%v').value('%v') }\n", key, value)
 	}
 	return
 }
@@ -196,6 +253,90 @@ func (t Resource) sg_rules() (ret string)  {
 	}
 	for _, value := range egress_rules {
 		ret += value.String()
+	}
+	return
+}
+
+func get_elb_healthcheck(arr *map[string]*ELB_HealthCheck, id string) (ret *ELB_HealthCheck) {
+	value, ok := (*arr)[id]
+	if ok == false {
+		ret = new(ELB_HealthCheck)
+		(*arr)[id] = ret
+	} else {
+		ret = value
+	}
+	return
+}
+
+func get_elb_listener(arr *map[string]*ELB_Listener, id string) (ret *ELB_Listener) {
+	value, ok := (*arr)[id]
+	if ok == false {
+		ret = new(ELB_Listener)
+		(*arr)[id] = ret
+	} else {
+		ret = value
+	}
+	return
+}
+
+func (t Resource) elb_attrs() (eattrs string)  {
+	attrs := gjson.Get(t.Raw, "primary.attributes")
+	availability_zones_regexp := regexp.MustCompile(`^availability_zones.[0-9]+$`)
+	availability_zones := make([]string, 0)
+	healthcheck_pattern := regexp.MustCompile(`^health_check\.([0-9]+)\.(.+)$`)
+	healthchecks := make(map[string]*ELB_HealthCheck, 10)
+	listener_pattern := regexp.MustCompile(`^listener\.([0-9]+)\.(.+)$`)
+	listeners := make(map[string]*ELB_Listener, 10)
+	attrs.ForEach(func(key, value gjson.Result) bool {
+		key_string := key.String()
+		if availability_zones_regexp.MatchString(key_string) {
+			availability_zones = append(availability_zones, value.String())
+		}
+		if healthcheck_pattern.MatchString(key_string) {
+			pattern_matches := healthcheck_pattern.FindStringSubmatch(key_string)
+			healthcheck := get_elb_healthcheck(&healthchecks, pattern_matches[1])
+			switch strings.ToLower(pattern_matches[2]) {
+			case "healthy_threshold":
+				healthcheck.Healthy_Threshold = value.Int()
+			case "interval":
+				healthcheck.Interval = value.Int()
+			case "target":
+				healthcheck.Target = value.String()
+			case "timeout":
+				healthcheck.Timeout = value.Int()
+			case "unhealthy_threshold":
+				healthcheck.Unhealthy_Threshold = value.Int()
+			}
+		}
+		if listener_pattern.MatchString(key_string) {
+			pattern_matches := listener_pattern.FindStringSubmatch(key_string)
+			listener := get_elb_listener(&listeners, pattern_matches[1])
+			switch strings.ToLower(pattern_matches[2]) {
+			case "instance_port":
+				listener.Instance_port = value.Int()
+			case "instance_protocol":
+				listener.Instance_protocol = value.String()
+			case "lb_port":
+				listener.Lb_port = value.Int()
+			case "lb_protocol":
+				listener.Lb_protocol = value.String()
+			}
+		}
+		if strings.EqualFold(strings.ToLower(key_string), "zone_id") {
+			eattrs += fmt.Sprintf("  its(:canonical_hosted_zone_name_id) { should eq '%v' }\n", value.String())
+		}
+		return true
+	})
+	availability_zones_str := ""
+	for _, value := range availability_zones {
+		availability_zones_str += fmt.Sprintf("'%v',", value)
+	}
+	eattrs += fmt.Sprintf("  its(:availability_zones) { should == [%v] }\n", availability_zones_str)
+	for _, value := range healthchecks {
+		eattrs += value.String()
+	}
+	for _, value := range listeners {
+		eattrs += value.String()
 	}
 	return
 }

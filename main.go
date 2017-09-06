@@ -8,6 +8,7 @@ import (
 	"github.com/sarunask/awspec-generator/resources"
 	"github.com/sarunask/awspec-generator/loggers"
 	"sync"
+	"strings"
 )
 
 var wg sync.WaitGroup
@@ -25,6 +26,10 @@ func exit_with_message(msg string, code int) {
 func parse_resource(resource *gjson.Result) {
 	defer wg.Done()
 	resource.ForEach(func(key, value gjson.Result) bool {
+		if strings.Contains(key.String(), "data.") {
+			//We don't work with data entries
+			return true
+		}
 		resource := resources.Parse(&value)
 		resource.TerraformName = key.String()
 		if resource.Type != resources.Unknown {

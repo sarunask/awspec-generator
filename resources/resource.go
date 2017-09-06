@@ -26,6 +26,8 @@ const (
 	VPN_CONNECTION
 	//Customer VPN GW
 	CUSTOMER_GW
+	//Elastic Load Balancer
+	ELB
 )
 
 // String returns a string representation of the type.
@@ -45,6 +47,8 @@ func (t Type) String() string {
 		return "aws_vpn_connection"
 	case CUSTOMER_GW:
 		return "aws_customer_gateway"
+	case ELB:
+		return "aws_elb"
 	}
 }
 
@@ -81,6 +85,8 @@ func (t Resource) String() string {
 		return t.aws_vpn_connection_spec()
 	case CUSTOMER_GW:
 		return t.aws_customer_gw_spec()
+	case ELB:
+		return t.aws_elb_spec()
 	}
 }
 
@@ -91,7 +97,8 @@ func (t Resource) AddDependency(r *Resource) {
 }
 
 func (t Resource) Write(folder string) {
-	file_name := filepath.Join(folder, t.Name + "-" + t.Type.String() + "_spec.rb")
+	file_name := filepath.Join(folder,
+		strings.Replace(t.TerraformName, ".", "-", -1) + "_spec.rb")
 	str := t.String()
 	file, err := os.OpenFile(file_name, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
