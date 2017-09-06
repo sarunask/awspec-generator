@@ -131,6 +131,7 @@ func Parse(json *gjson.Result) Resource {
 	//Get Attributes
 	res.Tags = make(map[string]string)
 	attrs := json.Get("primary.attributes")
+	var alt_name string
 	attrs.ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
 		if strings.Index(key_string, "tags.") != -1 {
@@ -139,10 +140,15 @@ func Parse(json *gjson.Result) Resource {
 				res.Tags[tag_name] = value.String()
 			}
 		}
+		if strings.EqualFold(key_string, "name") {
+			alt_name = value.String()
+		}
 		return true
 	})
 	if name, ok := res.Tags["Name"]; ok != false {
 		res.Name = name
+	} else {
+		res.Name = alt_name
 	}
 	return res
 }
