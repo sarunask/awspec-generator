@@ -1,6 +1,26 @@
 require 'json'
 
 class EC2Helper
+    def self.GetEC2IdFromName(name)
+        instances = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        ec2 = Aws::EC2::Resource.new()
+        ec2.instances({filters: [
+            {name: 'tag:Name', values: [name]},
+            {name: 'instance-state-name', values: [ 'pending', 'running']}
+        ]}).each do |i|
+            instances.push(i.id)
+        end
+
+        # If we found a single instance return it, otherwise throw an error.
+        if instances.count == 1 then
+            return instances[0]
+        elsif instances.count == 0 then
+            STDERR.puts 'Error: ' + name + ' Instance not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one running instance exists with that Name'
+        end
+    end
     def self.GetVPCIdFromName(name)
         vpcs = Array.new
         # Filter the ec2 instances for name and state pending or running
@@ -75,6 +95,68 @@ class EC2Helper
             STDERR.puts 'Error: ' + name + ' VPN GW not found'
         else
             STDERR.puts 'Error: ' + name + ' more than one VPN GW exists with that Name'
+        end
+    end
+    def self.GetASGIdFromName(name)
+        asgs = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        autoscale = Aws::AutoScaling::Client.new()
+        begin
+            resp = autoscale.describe_auto_scaling_groups()
+            resp.auto_scaling_groups.each do |i|
+                i.tags.each do |tag|
+                    if tag.key == "Name" and tag.value == name then
+                        asgs.push(i['auto_scaling_group_name'])
+                    end
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws autoscaling describe-auto-scaling-groups"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['AutoScalingGroups'].each do |i|
+                i.Tags.each do |tag|
+                    if tag.Key == "Name" and tag.Value == name then
+                        asgs.push(i['AutoScalingGroupName'])
+                    end
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if asgs.count == 1 then
+            return asgs[0]
+        elsif asgs.count == 0 then
+            STDERR.puts 'Error: ' + name + ' AutoScalingGroup not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one AutoScalingGroup exists with that Name'
+        end
+    end
+    def self.GetRDSIdFromName(name)
+        rds = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        rds_client = Aws::RDS::Client.new()
+        begin
+            resp = rds_client.describe_db_instances()
+            resp.db_instances.each do |i|
+                if i.db_instance_arn.include? name
+                    rds.push(i.db_instance_identifier)
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws rds describe-db-instances"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['AutoScalingGroups'].each do |i|
+                if i.DBInstanceArn.include? name
+                    rds.push(i.DBInstanceIdentifier)
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if rds.count == 1 then
+            return rds[0]
+        elsif rds.count == 0 then
+            STDERR.puts 'Error: ' + name + ' RDS DB instance not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one RDS DB instance exists with that Name'
         end
     end
 end

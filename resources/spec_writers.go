@@ -7,70 +7,6 @@ import (
 	"regexp"
 )
 
-type RuleType int
-
-const (
-	Ingress RuleType = iota
-	Egress
-)
-
-type SG_rule struct {
-	Type RuleType
-	Port int64
-	Protocol string
-	CIDR_blocks []string
-}
-
-func (t *SG_rule) String() (ret string) {
-	sg_type := ":inbound"
-	if t.Type == Egress {
-		sg_type = ":outbound"
-	}
-	sg_protocol := ""
-	if t.Protocol != "" {
-		sg_protocol = fmt.Sprintf(".protocol('%v')", t.Protocol)
-	}
-
-	ret = fmt.Sprintf("  its(%v) { should be_opened(%v)%v }\n", sg_type,
-		t.Port, sg_protocol)
-	return
-}
-
-type ELB_HealthCheck struct {
-	Healthy_Threshold int64
-	Unhealthy_Threshold int64
-	Interval int64
-	Target string
-	Timeout int64
-}
-
-func (t *ELB_HealthCheck) String() (ret string) {
-	if t.Target != "" {
-		ret += fmt.Sprintf("  its(:health_check_target) {should eq '%v'}\n", t.Target)
-	}
-	ret += fmt.Sprintf("  its(:health_check_interval) {should eq %v}\n", t.Interval)
-	ret += fmt.Sprintf("  its(:health_check_timeout) {should eq %v}\n", t.Timeout)
-	ret += fmt.Sprintf("  its(:health_check_unhealthy_threshold) {should eq %v}\n", t.Unhealthy_Threshold)
-	ret += fmt.Sprintf("  its(:health_check_healthy_threshold) {should eq %v}\n", t.Healthy_Threshold)
-	return
-}
-
-type ELB_Listener struct {
-	Instance_port int64
-	Instance_protocol string
-	Lb_port int64
-	Lb_protocol string
-}
-
-func (t *ELB_Listener) String() (ret string) {
-	ret = fmt.Sprintf("  it { should have_listener(protocol: '%v', port: %v, " +
-		"instance_protocol: '%v', instance_port: %v) }\n",
-		strings.ToUpper(t.Lb_protocol),
-		t.Lb_port,
-		strings.ToUpper(t.Instance_protocol),
-		t.Instance_port)
-	return
-}
 
 func (t Resource) aws_vpc_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
@@ -142,17 +78,6 @@ func (t Resource) aws_vpn_connection_spec() string {
 		"end\n", t.Name)
 }
 
-//describe elb('rss-non-prod-kapacitor-lb') do
-//it { should exist }
-//its(:load_balancer_name) { should eq 'rss-non-prod-kapacitor-lb' }
-//its(:health_check_target) { should eq 'TCP:9092' }
-//its(:health_check_interval) { should eq 30 }
-//its(:health_check_timeout) { should eq 3 }
-//its(:health_check_unhealthy_threshold) { should eq 2 }
-//its(:health_check_healthy_threshold) { should eq 2 }
-//it { should have_listener(protocol: 'HTTP', port: 9092, instance_protocol: 'HTTP', instance_port: 9092) }
-//end
-
 func (t Resource) aws_elb_spec() string {
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
@@ -163,9 +88,32 @@ func (t Resource) aws_elb_spec() string {
 	    "end\n", t.Name, t.Name)
 }
 
-func (t Resource) tags() (tags string) {
-	for key, value := range t.Tags {
-		tags += fmt.Sprintf("  it { should have_tag('%v').value('%v') }\n", key, value)
+func (t Resource) aws_autoscaling_group_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe autoscaling_group(EC2Helper.GetASGIdFromName('%v')) do\n"+
+		"  it { should exist }\n" +
+		t.tags() +
+		t.asg_attrs() +
+		"end\n", t.Name)
+}
+
+func (t Resource) aws_rds_instance_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe rds(EC2Helper.GetRDSIdFromName('%v')) do\n"+
+		"  it { should exist }\n" +
+		"  it { should be_available }\n" +
+		t.tags() +
+		t.rds_attrs() +
+		t.rds_dependencies() +
+		"end\n", t.Name)
+}
+
+func (t Resource) tags() (ret string) {
+	for _, value := range t.Tags {
+		ret += fmt.Sprintf("  it { should have_tag('%v').value('%v') }\n",
+			value.Name, value.Value)
 	}
 	return
 }
@@ -205,6 +153,17 @@ func (t Resource) vpc_attachments_should_be() (ret string) {
 	return
 }
 
+func (t Resource) rds_dependencies() (ret string) {
+	for i := range t.Dependent {
+		switch t.Dependent[i].Type {
+		case SG:
+			ret += fmt.Sprintf("  it { should have_security_group('%v') }\n",
+				t.Dependent[i].Name)
+		}
+	}
+	return
+}
+
 func get_sg_rule(arr *map[string]*SG_rule, id string) (ret *SG_rule) {
 	value, ok := (*arr)[id]
 	if ok == false {
@@ -217,12 +176,11 @@ func get_sg_rule(arr *map[string]*SG_rule, id string) (ret *SG_rule) {
 }
 
 func (t Resource) sg_rules() (ret string)  {
-	attrs := gjson.Get(t.Raw, "primary.attributes")
 	regexp_pattern := regexp.MustCompile(`^(ingress|egress)\.([0-9]+)\.(to_port|protocol)$`)
 	ingress_rules := make(map[string]*SG_rule, 100)
 	egress_rules := make(map[string]*SG_rule, 100)
 
-	attrs.ForEach(func(key, value gjson.Result) bool {
+	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
 		if strings.EqualFold(key_string, "egress.#") {
 			ret += fmt.Sprintf("  its(:outbound_rule_count) { should eq %v }\n", value.String())
@@ -279,33 +237,39 @@ func get_elb_listener(arr *map[string]*ELB_Listener, id string) (ret *ELB_Listen
 	return
 }
 
+func append_array_when_regexp_match(reg *regexp.Regexp, arr *[]string, key string, val string) {
+	//This function would append to provided array of string (arr) val if key match Regexp reg
+	if reg.MatchString(key) {
+		*arr = append( *arr, val)
+	}
+}
+
 func (t Resource) elb_attrs() (eattrs string)  {
-	attrs := gjson.Get(t.Raw, "primary.attributes")
 	availability_zones_regexp := regexp.MustCompile(`^availability_zones.[0-9]+$`)
 	availability_zones := make([]string, 0)
 	healthcheck_pattern := regexp.MustCompile(`^health_check\.([0-9]+)\.(.+)$`)
 	healthchecks := make(map[string]*ELB_HealthCheck, 10)
 	listener_pattern := regexp.MustCompile(`^listener\.([0-9]+)\.(.+)$`)
 	listeners := make(map[string]*ELB_Listener, 10)
-	attrs.ForEach(func(key, value gjson.Result) bool {
+	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
-		if availability_zones_regexp.MatchString(key_string) {
-			availability_zones = append(availability_zones, value.String())
-		}
+		value_string := value.String()
+		value_int64 := value.Int()
+		append_array_when_regexp_match(availability_zones_regexp, &availability_zones, key_string, value_string)
 		if healthcheck_pattern.MatchString(key_string) {
 			pattern_matches := healthcheck_pattern.FindStringSubmatch(key_string)
 			healthcheck := get_elb_healthcheck(&healthchecks, pattern_matches[1])
 			switch strings.ToLower(pattern_matches[2]) {
 			case "healthy_threshold":
-				healthcheck.Healthy_Threshold = value.Int()
+				healthcheck.Healthy_Threshold = value_int64
 			case "interval":
-				healthcheck.Interval = value.Int()
+				healthcheck.Interval = value_int64
 			case "target":
-				healthcheck.Target = value.String()
+				healthcheck.Target = value_string
 			case "timeout":
-				healthcheck.Timeout = value.Int()
+				healthcheck.Timeout = value_int64
 			case "unhealthy_threshold":
-				healthcheck.Unhealthy_Threshold = value.Int()
+				healthcheck.Unhealthy_Threshold = value_int64
 			}
 		}
 		if listener_pattern.MatchString(key_string) {
@@ -313,17 +277,17 @@ func (t Resource) elb_attrs() (eattrs string)  {
 			listener := get_elb_listener(&listeners, pattern_matches[1])
 			switch strings.ToLower(pattern_matches[2]) {
 			case "instance_port":
-				listener.Instance_port = value.Int()
+				listener.Instance_port = value_int64
 			case "instance_protocol":
-				listener.Instance_protocol = value.String()
+				listener.Instance_protocol = value_string
 			case "lb_port":
-				listener.Lb_port = value.Int()
+				listener.Lb_port = value_int64
 			case "lb_protocol":
-				listener.Lb_protocol = value.String()
+				listener.Lb_protocol = value_string
 			}
 		}
 		if strings.EqualFold(strings.ToLower(key_string), "zone_id") {
-			eattrs += fmt.Sprintf("  its(:canonical_hosted_zone_name_id) { should eq '%v' }\n", value.String())
+			eattrs += fmt.Sprintf("  its(:canonical_hosted_zone_name_id) { should eq '%v' }\n", value_string)
 		}
 		return true
 	})
@@ -332,11 +296,159 @@ func (t Resource) elb_attrs() (eattrs string)  {
 		availability_zones_str += fmt.Sprintf("'%v',", value)
 	}
 	eattrs += fmt.Sprintf("  its(:availability_zones) { should == [%v] }\n", availability_zones_str)
-	for _, value := range healthchecks {
-		eattrs += value.String()
+	for _, val := range healthchecks {
+		eattrs += val.String()
 	}
-	for _, value := range listeners {
-		eattrs += value.String()
+	for _, val := range listeners {
+		eattrs += val.String()
 	}
+	return
+}
+
+func (t Resource) asg_attrs() (ret string)  {
+	//AutoScallingGroups attributes
+	availability_zones_regexp := regexp.MustCompile(`^availability_zones.[0-9]+$`)
+	availability_zones := make([]string, 0)
+	elbs_regexp := regexp.MustCompile(`^load_balancers.[0-9]+$`)
+	elbs := make([]string, 0)
+	termination_policies_regexp := regexp.MustCompile(`^termination_policies.[0-9]+$`)
+	termination_policies := make([]string, 0)
+
+	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
+		key_string := key.String()
+		value_string := value.String()
+		append_array_when_regexp_match(availability_zones_regexp, &availability_zones, key_string, value_string)
+		append_array_when_regexp_match(elbs_regexp, &elbs, key_string, value_string)
+		append_array_when_regexp_match(termination_policies_regexp, &termination_policies, key_string, value_string)
+		switch strings.ToLower(key_string) {
+		case "name_prefix":
+			ret += fmt.Sprintf("  its(:auto_scaling_group_name) { should start_with('%v')}\n",
+				value_string)
+		case "launch_configuration":
+			ret += fmt.Sprintf("  it { should have_launch_configuration('%v') }\n",
+				value_string)
+		case "max_size":
+			ret += fmt.Sprintf("  its(:max_size) { should == %v }\n",
+				value_string)
+		case "min_size":
+			ret += fmt.Sprintf("  its(:min_size) { should == %v }\n",
+				value_string)
+		case "desired_capacity":
+			ret += fmt.Sprintf("  its(:desired_capacity) { should == %v }\n",
+				value_string)
+		case "default_cooldown":
+			ret += fmt.Sprintf("  its(:default_cooldown) { should == %v }\n",
+				value_string)
+		case "health_check_type":
+			ret += fmt.Sprintf("  its(:health_check_type) { should == '%v' }\n",
+				value_string)
+		case "health_check_grace_period":
+			ret += fmt.Sprintf("  its(:health_check_grace_period) { should == %v }\n",
+				value_string)
+		case "protect_from_scale_in":
+			ret += fmt.Sprintf("  its(:new_instances_protected_from_scale_in) { should == %v }\n",
+				value_string)
+		case "placement_group":
+			plgrp_str := "nil"
+			if value_string != "" {
+				plgrp_str = fmt.Sprintf("'%v'", value_string)
+			}
+			ret += fmt.Sprintf("  its(:placement_group) { should == %v }\n",
+				plgrp_str)
+		}
+
+		return true
+	})
+	availability_zones_str := ""
+	for _, value := range availability_zones {
+		availability_zones_str += fmt.Sprintf("'%v',", value)
+	}
+	ret += fmt.Sprintf("  its(:availability_zones) { should == [%v] }\n",
+		availability_zones_str)
+	elbs_str := ""
+	for _, value := range elbs {
+		elbs_str += fmt.Sprintf("'%v',", value)
+	}
+	ret += fmt.Sprintf("  its(:load_balancer_names) { should == [%v] }\n",
+		elbs_str)
+	termination_policies_str := ""
+	for _, value := range termination_policies {
+		termination_policies_str += fmt.Sprintf("'%v',", value)
+	}
+	ret += fmt.Sprintf("  its(:termination_policies) { should == [%v] }\n",
+		termination_policies_str)
+
+	return
+}
+
+func (t Resource) rds_attrs() (ret string)  {
+	//RDS DB instance attributes
+	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
+		key_string := key.String()
+		value_string := value.String()
+		switch strings.ToLower(key_string) {
+		case "option_group_name":
+			ret += fmt.Sprintf("  it { should have_option_group('%v')}\n",
+				value_string)
+		case "instance_class":
+			ret += fmt.Sprintf("  its(:db_instance_class) { should eq '%v' }\n",
+				value_string)
+		case "engine":
+			ret += fmt.Sprintf("  its(:engine) { should eq '%v' }\n",
+				value_string)
+		case "engine_version":
+			ret += fmt.Sprintf("  its(:engine_version) { should eq '%v' }\n",
+				value_string)
+		case "db_instance_class":
+			ret += fmt.Sprintf("  its(:db_instance_class) { should eq '%v' }\n",
+				value_string)
+		case "username":
+			ret += fmt.Sprintf("  its(:master_username) { should eq '%v' }\n",
+				value_string)
+		case "name":
+			ret += fmt.Sprintf("  its(:db_name) { should eq '%v' }\n",
+				value_string)
+		case "allocated_storage":
+			ret += fmt.Sprintf("  its(:allocated_storage) { should eq %v }\n",
+				value_string)
+		case "availability_zone":
+			ret += fmt.Sprintf("  its(:availability_zone) { should eq '%v' }\n",
+				value_string)
+		case "backup_retention_period":
+			ret += fmt.Sprintf("  its(:backup_retention_period) { should eq %v }\n",
+				value_string)
+		case "maintenance_window":
+			ret += fmt.Sprintf("  its(:preferred_maintenance_window) { should eq '%v' }\n",
+				value_string)
+		case "backup_window":
+			ret += fmt.Sprintf("  its(:preferred_backup_window) { should eq '%v' }\n",
+				value_string)
+		case "multi_az":
+			ret += fmt.Sprintf("  its(:multi_az) { should eq %v }\n",
+				value_string)
+		case "publicly_accessible":
+			ret += fmt.Sprintf("  its(:publicly_accessible) { should eq %v }\n",
+				value_string)
+		case "auto_minor_version_upgrade":
+			ret += fmt.Sprintf("  its(:auto_minor_version_upgrade) { should eq %v }\n",
+				value_string)
+		case "storage_type":
+			ret += fmt.Sprintf("  its(:storage_type) { should eq '%v' }\n",
+				value_string)
+		case "storage_encrypted":
+			ret += fmt.Sprintf("  its(:storage_encrypted) { should eq %v }\n",
+				value_string)
+		case "kms_key_id":
+			ret += fmt.Sprintf("  its(:kms_key_id) { should eq '%v' }\n",
+				value_string)
+		case "copy_tags_to_snapshot":
+			ret += fmt.Sprintf("  its(:copy_tags_to_snapshot) { should eq %v }\n",
+				value_string)
+		case "monitoring_interval":
+			ret += fmt.Sprintf("  its(:monitoring_interval) { should eq %v }\n",
+				value_string)
+		}
+		return true
+	})
 	return
 }

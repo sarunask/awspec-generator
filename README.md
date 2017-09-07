@@ -7,9 +7,13 @@ AWSpec infrastructure tests.
 For now I have implemented such test resources:
 * VPC
 * Subnet
+* Security Group
 * VPN Gateway
-* Customer Gateway
 * VPN Connection
+* Customer Gateway
+* ELB
+* ASG
+* RDS Instance
 
 ## Install program
 In order to install program, you would need to Install GO language and setup it as described 

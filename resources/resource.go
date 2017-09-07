@@ -7,6 +7,10 @@ import (
 	"os"
 	"io"
 	"path/filepath"
+	"regexp"
+	"math/rand"
+	"time"
+	"fmt"
 )
 
 type Type int
@@ -28,6 +32,10 @@ const (
 	CUSTOMER_GW
 	//Elastic Load Balancer
 	ELB
+	//AutoScaling Group
+	ASG
+	//RDS Instance
+	RDS
 )
 
 // String returns a string representation of the type.
@@ -49,6 +57,10 @@ func (t Type) String() string {
 		return "aws_customer_gateway"
 	case ELB:
 		return "aws_elb"
+	case ASG:
+		return "aws_autoscaling_group"
+	case RDS:
+		return "aws_db_instance"
 	}
 }
 
@@ -63,9 +75,11 @@ type Resource struct {
 	//Terraform Spec name of resource
 	TerraformName string
 	//Tags
-	Tags map[string]string
+	Tags map[string]*Tag
 	//Dependent resources
 	Dependent map[int]*Resource
+	//Attributes
+	Attrs *gjson.Result
 }
 
 // String returns a string representation of the value.
@@ -87,6 +101,10 @@ func (t Resource) String() string {
 		return t.aws_customer_gw_spec()
 	case ELB:
 		return t.aws_elb_spec()
+	case ASG:
+		return t.aws_autoscaling_group_spec()
+	case RDS:
+		return t.aws_rds_instance_spec()
 	}
 }
 
@@ -136,25 +154,45 @@ func Parse(json *gjson.Result) Resource {
 		res.Dependent = make(map[int]*Resource)
 	}
 	//Get Attributes
-	res.Tags = make(map[string]string)
+	res.Tags = make(map[string]*Tag)
 	attrs := json.Get("primary.attributes")
+	res.Attrs = &attrs
 	var alt_name string
-	attrs.ForEach(func(key, value gjson.Result) bool {
+	tag_pattern := regexp.MustCompile(`^tag\.([0-9]+)\.(.+)$`)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	(*res.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
-		if strings.Index(key_string, "tags.") != -1 {
+		if tag_pattern.MatchString(key_string) {
+			//We have not-random tags from Terraform
+			pattern_matches := tag_pattern.FindStringSubmatch(key_string)
+			tag := get_tag(&res.Tags, pattern_matches[1])
+			switch strings.ToLower(pattern_matches[2]) {
+			case "key":
+				tag.Name = value.String()
+			case "value":
+				tag.Value = value.String()
+			}
+		} else if strings.Index(key_string, "tags.") != -1 {
 			tag_name := strings.Replace(key_string, "tags.", "", 1)
 			if tag_name != "%" {
-				res.Tags[tag_name] = value.String()
+				//Other tag format - use random strings
+				tag := get_tag(&res.Tags, fmt.Sprintf("%v", r.Int63()))
+				tag.Name = tag_name
+				tag.Value = value.String()
 			}
-		}
-		if strings.EqualFold(key_string, "name") {
+			return true
+		} else if strings.EqualFold(key_string, "name") {
 			alt_name = value.String()
 		}
 		return true
 	})
-	if name, ok := res.Tags["Name"]; ok != false {
-		res.Name = name
-	} else {
+	for _, value := range res.Tags {
+		if strings.ToLower(value.Name) == "name" {
+			res.Name = value.Value
+			break
+		}
+	}
+	if res.Name == "" {
 		res.Name = alt_name
 	}
 	return res
