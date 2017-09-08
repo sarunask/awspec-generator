@@ -1,15 +1,30 @@
 require 'json'
 
 class EC2Helper
-    def self.GetEC2IdFromName(name)
+    def self.GetEC2IdFromName(name, service)
         instances = Array.new
         # Filter the ec2 instances for name and state pending or running
+        # Also on service
         ec2 = Aws::EC2::Resource.new()
-        ec2.instances({filters: [
-            {name: 'tag:Name', values: [name]},
-            {name: 'instance-state-name', values: [ 'pending', 'running']}
-        ]}).each do |i|
-            instances.push(i.id)
+        begin
+            ec2.instances({filters: [
+                {name: 'tag:Name', values: [name]},
+                {name: 'tag:service', values: [service]},
+                {name: 'instance-state-name', values: [ 'pending', 'running']}
+            ]}).each do |i|
+                instances.push(i.id)
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws ec2 describe-instances --filters "\
+                  "'Name=tag:Name,Values=[#{name}]' "\
+                  "'Name=tag:service,Values=[#{service}]' "\
+                  "'Name=instance-state-name,Values=[pending,running]'"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['Reservations'].each do |i|
+                i['Instances'].each do |j|
+                    instances.push(i['InstanceId'])
+                end
+            end
         end
 
         # If we found a single instance return it, otherwise throw an error.
@@ -19,6 +34,7 @@ class EC2Helper
             STDERR.puts 'Error: ' + name + ' Instance not found'
         else
             STDERR.puts 'Error: ' + name + ' more than one running instance exists with that Name'
+            return instances[0]
         end
     end
     def self.GetVPCIdFromName(name)

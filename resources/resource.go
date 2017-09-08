@@ -36,6 +36,12 @@ const (
 	ASG
 	//RDS Instance
 	RDS
+	//IAM Policy
+	IAM_POLICY
+	//IAM Role
+	IAM_ROLE
+	//EC2 Instance
+	EC2_INSTANCE
 )
 
 // String returns a string representation of the type.
@@ -61,6 +67,12 @@ func (t Type) String() string {
 		return "aws_autoscaling_group"
 	case RDS:
 		return "aws_db_instance"
+	case IAM_POLICY:
+		return "aws_iam_policy"
+	case IAM_ROLE:
+		return "aws_iam_role"
+	case EC2_INSTANCE:
+		return "aws_instance"
 	}
 }
 
@@ -105,6 +117,12 @@ func (t Resource) String() string {
 		return t.aws_autoscaling_group_spec()
 	case RDS:
 		return t.aws_rds_instance_spec()
+	case IAM_POLICY:
+		return t.aws_iam_policy_spec()
+	case IAM_ROLE:
+		return t.aws_iam_role_spec()
+	case EC2_INSTANCE:
+		return t.aws_ec2_instance_spec()
 	}
 }
 
@@ -112,6 +130,16 @@ func (t Resource) String() string {
 func (t Resource) AddDependency(r *Resource) {
 	index := len(t.Dependent)
 	t.Dependent[index] = r
+}
+
+func (t Resource) FindTagValue(tag_name string) (ret string) {
+	for _, value := range t.Tags {
+		if strings.EqualFold(value.Name, tag_name) {
+			ret = value.Value
+			break
+		}
+	}
+	return
 }
 
 func (t Resource) Write(folder string) {
@@ -159,36 +187,38 @@ func Parse(json *gjson.Result) Resource {
 	res.Attrs = &attrs
 	var alt_name string
 	tag_pattern := regexp.MustCompile(`^tag\.([0-9]+)\.(.+)$`)
+	tags_pattern := regexp.MustCompile(`^tags\.(.+)$`)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	(*res.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
+		value_string := value.String()
 		if tag_pattern.MatchString(key_string) {
 			//We have not-random tags from Terraform
 			pattern_matches := tag_pattern.FindStringSubmatch(key_string)
 			tag := get_tag(&res.Tags, pattern_matches[1])
 			switch strings.ToLower(pattern_matches[2]) {
 			case "key":
-				tag.Name = value.String()
+				tag.Name = value_string
 			case "value":
-				tag.Value = value.String()
+				tag.Value = value_string
 			}
-		} else if strings.Index(key_string, "tags.") != -1 {
-			tag_name := strings.Replace(key_string, "tags.", "", 1)
-			if tag_name != "%" {
+		} else if tags_pattern.MatchString(key_string) {
+			tags_pattern_matches := tags_pattern.FindStringSubmatch(key_string)
+			if tags_pattern_matches[1] != "%" {
 				//Other tag format - use random strings
 				tag := get_tag(&res.Tags, fmt.Sprintf("%v", r.Int63()))
-				tag.Name = tag_name
-				tag.Value = value.String()
+				tag.Name = tags_pattern_matches[1]
+				tag.Value = value_string
 			}
 			return true
 		} else if strings.EqualFold(key_string, "name") {
-			alt_name = value.String()
+			alt_name = value_string
 		}
 		return true
 	})
-	for _, value := range res.Tags {
-		if strings.ToLower(value.Name) == "name" {
-			res.Name = value.Value
+	for _, val := range res.Tags {
+		if strings.ToLower(val.Name) == "name" {
+			res.Name = val.Value
 			break
 		}
 	}
