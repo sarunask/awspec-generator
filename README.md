@@ -14,6 +14,9 @@ For now I have implemented such test resources:
 * ELB
 * ASG
 * RDS Instance
+* IAM Policies
+* IAM Roles
+* EC2 instances
 
 ## Install program
 In order to install program, you would need to Install GO language and setup it as described 
