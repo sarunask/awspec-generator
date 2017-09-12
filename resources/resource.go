@@ -42,6 +42,8 @@ const (
 	IAM_ROLE
 	//EC2 Instance
 	EC2_INSTANCE
+	//Route53 Record
+	ROUTE53_RECORD
 )
 
 // String returns a string representation of the type.
@@ -73,6 +75,8 @@ func (t Type) String() string {
 		return "aws_iam_role"
 	case EC2_INSTANCE:
 		return "aws_instance"
+	case ROUTE53_RECORD:
+		return "aws_route53_record"
 	}
 }
 
@@ -123,6 +127,8 @@ func (t Resource) String() string {
 		return t.aws_iam_role_spec()
 	case EC2_INSTANCE:
 		return t.aws_ec2_instance_spec()
+	case ROUTE53_RECORD:
+		return t.aws_route53_zone_record_spec()
 	}
 }
 

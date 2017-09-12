@@ -95,3 +95,24 @@ func get_tag(arr *map[string]*Tag, id string) (ret *Tag) {
 	}
 	return
 }
+
+type Alias struct {
+	Name string
+	Zone_id string
+}
+
+func (t *Alias) String() (ret string) {
+	ret = fmt.Sprintf("alias('%v.', '%v')", t.Name, t.Zone_id)
+	return
+}
+
+func get_alias(arr *map[string]*Alias, id string) (ret *Alias) {
+	value, ok := (*arr)[id]
+	if ok == false {
+		ret = new(Alias)
+		(*arr)[id] = ret
+	} else {
+		ret = value
+	}
+	return
+}
