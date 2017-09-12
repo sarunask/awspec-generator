@@ -17,6 +17,7 @@ For now I have implemented such test resources:
 * IAM Policies
 * IAM Roles
 * EC2 instances
+* Route53 records (per zone testing)
 
 ## Install program
 In order to install program, you would need to Install GO language and setup it as described 
