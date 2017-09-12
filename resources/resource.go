@@ -34,6 +34,8 @@ const (
 	ELB
 	//AutoScaling Group
 	ASG
+	//Launch Configuration
+	LAUNCH_CONFIG
 	//RDS Instance
 	RDS
 	//IAM Policy
@@ -67,6 +69,8 @@ func (t Type) String() string {
 		return "aws_elb"
 	case ASG:
 		return "aws_autoscaling_group"
+	case LAUNCH_CONFIG:
+		return "aws_launch_configuration"
 	case RDS:
 		return "aws_db_instance"
 	case IAM_POLICY:
@@ -119,6 +123,8 @@ func (t Resource) String() string {
 		return t.aws_elb_spec()
 	case ASG:
 		return t.aws_autoscaling_group_spec()
+	case LAUNCH_CONFIG:
+		return t.aws_launch_configuration_spec()
 	case RDS:
 		return t.aws_rds_instance_spec()
 	case IAM_POLICY:

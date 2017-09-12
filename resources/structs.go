@@ -21,9 +21,10 @@ type SG_rule struct {
 	Port int64
 	Protocol string
 	CIDR_blocks []string
+	Other_SG []string
 }
 
-func (t *SG_rule) String() (ret string) {
+func (t *SG_rule) String(dependencies *map[int]*Resource) (ret string) {
 	sg_type := ":inbound"
 	if t.Type == Egress {
 		sg_type = ":outbound"
@@ -32,9 +33,28 @@ func (t *SG_rule) String() (ret string) {
 	if t.Protocol != "" {
 		sg_protocol = fmt.Sprintf(".protocol('%v')", t.Protocol)
 	}
+	for_cidr := ""
+	if len(t.CIDR_blocks) > 0 {
+		for _, value := range t.CIDR_blocks {
+			for_cidr += fmt.Sprintf(".for('%v')", value)
+		}
+	}
+	if len(t.Other_SG) > 0 {
+		for _, value := range t.Other_SG {
+			//Search in dependencies for name of this group
+			for _, dep := range *dependencies {
+				if dep.Type == SG {
+					id := GetAttributeByName(dep.Attrs, "id")
+					if id.String() == value {
+						for_cidr += fmt.Sprintf(".for('%v')", dep.Name)
+					}
+				}
+			}
+		}
+	}
 
-	ret = fmt.Sprintf("  its(%v) { should be_opened(%v)%v }\n", sg_type,
-		t.Port, sg_protocol)
+	ret = fmt.Sprintf("  its(%v) { should be_opened(%v)%v%v }\n", sg_type,
+		t.Port, sg_protocol, for_cidr)
 	return
 }
 

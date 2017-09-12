@@ -95,7 +95,20 @@ func (t Resource) aws_autoscaling_group_spec() string {
 		"  it { should exist }\n" +
 		t.tags() +
 		t.asg_attrs() +
+		t.asg_dependencies() +
 		"end\n", t.Name)
+}
+
+func (t Resource) aws_launch_configuration_spec() string {
+	name_prefix := GetAttributeByName(t.Attrs, "name_prefix")
+
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe launch_configuration(EC2Helper.GetLaunchConfigIdFromName('%v')) do\n"+
+		"  it { should exist }\n" +
+		"  its(:launch_configuration_name) { should start_with('%v') }\n" +
+		t.lc_attrs() +
+		"end\n", name_prefix.String(), name_prefix.String())
 }
 
 func (t Resource) aws_rds_instance_spec() string {
@@ -202,6 +215,19 @@ func (t Resource) vpc_attachments_should_be() (ret string) {
 	return
 }
 
+func (t Resource) asg_dependencies() (ret string) {
+	for i := range t.Dependent {
+		switch t.Dependent[i].Type {
+		case LAUNCH_CONFIG:
+			name_prefix := GetAttributeByName(t.Dependent[i].Attrs, "name_prefix")
+			ret += fmt.Sprintf(
+				"  it { should have_launch_configuration(EC2Helper.GetLaunchConfigIdFromName('%v')) }\n",
+				name_prefix)
+		}
+	}
+	return
+}
+
 func (t Resource) sg_dependencies() (ret string) {
 	for i := range t.Dependent {
 		switch t.Dependent[i].Type {
@@ -226,17 +252,20 @@ func get_sg_rule(arr *map[string]*SG_rule, id string) (ret *SG_rule) {
 
 func (t Resource) sg_rules() (ret string)  {
 	regexp_pattern := regexp.MustCompile(`^(ingress|egress)\.([0-9]+)\.(to_port|protocol)$`)
+	cidr_pattern := regexp.MustCompile(`^(ingress|egress)\.([0-9]+)\.cidr_blocks\.[0-9]+$`)
+	sg_pattern := regexp.MustCompile(`^(ingress|egress)\.([0-9]+)\.security_groups\.[0-9]+$`)
 	ingress_rules := make(map[string]*SG_rule, 100)
 	egress_rules := make(map[string]*SG_rule, 100)
 
 	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
+		value_string := value.String()
 		if strings.EqualFold(key_string, "egress.#") {
-			ret += fmt.Sprintf("  its(:outbound_rule_count) { should eq %v }\n", value.String())
+			ret += fmt.Sprintf("  its(:outbound_rule_count) { should eq %v }\n", value_string)
 			return true
 		}
 		if strings.EqualFold(key_string, "ingress.#") {
-			ret += fmt.Sprintf("  its(:inbound_rule_count) { should eq %v }\n", value.String())
+			ret += fmt.Sprintf("  its(:inbound_rule_count) { should eq %v }\n", value_string)
 			return true
 		}
 		if regexp_pattern.MatchString(key_string) {
@@ -249,17 +278,27 @@ func (t Resource) sg_rules() (ret string)  {
 			if strings.EqualFold(pattern_matches[3], "to_port") {
 				sg_rule.Port = value.Int()
 			} else {
-				sg_rule.Protocol = strings.ToLower(value.String())
+				sg_rule.Protocol = strings.ToLower(value_string)
 			}
 
+		}
+		if cidr_pattern.MatchString(key_string) {
+			pattern_matches := cidr_pattern.FindStringSubmatch(key_string)
+			sg_rule := get_sg_rule(&ingress_rules, pattern_matches[2])
+			sg_rule.CIDR_blocks = append(sg_rule.CIDR_blocks, value_string)
+		}
+		if sg_pattern.MatchString(key_string) {
+			pattern_matches := sg_pattern.FindStringSubmatch(key_string)
+			sg_rule := get_sg_rule(&ingress_rules, pattern_matches[2])
+			sg_rule.Other_SG = append(sg_rule.Other_SG, value_string)
 		}
 		return true
 	})
 	for _, value := range ingress_rules {
-		ret += value.String()
+		ret += value.String(&t.Dependent)
 	}
 	for _, value := range egress_rules {
-		ret += value.String()
+		ret += value.String(&t.Dependent)
 	}
 	return
 }
@@ -372,9 +411,6 @@ func (t Resource) asg_attrs() (ret string)  {
 		switch strings.ToLower(key_string) {
 		case "name_prefix":
 			ret += fmt.Sprintf("  its(:auto_scaling_group_name) { should start_with('%v')}\n",
-				value_string)
-		case "launch_configuration":
-			ret += fmt.Sprintf("  it { should have_launch_configuration('%v') }\n",
 				value_string)
 		case "max_size":
 			ret += fmt.Sprintf("  its(:max_size) { should == %v }\n",
@@ -587,3 +623,13 @@ func (t Resource) route53_attrs() (ret string)  {
 	}
 	return
 }
+
+func (t Resource) lc_attrs() (ret string)  {
+	//LaunchConfiguration attributes
+	ami_id := GetAttributeByName(t.Attrs, "image_id")
+	if ami_id.String() != "" {
+		ret += fmt.Sprintf("  its(:image_id) { should eq '%v' }\n", ami_id.String())
+	}
+	return
+}
+

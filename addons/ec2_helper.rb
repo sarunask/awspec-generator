@@ -175,4 +175,33 @@ class EC2Helper
             STDERR.puts 'Error: ' + name + ' more than one RDS DB instance exists with that Name'
         end
     end
+    def self.GetLaunchConfigIdFromName(name)
+        lcs = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        lc_client = Aws::AutoScaling::Client.new()
+        begin
+            resp = lc_client.describe_launch_configurations()
+            resp.launch_configurations.each do |i|
+                if i.launch_configuration_name.include? name
+                    lcs.push(i.launch_configuration_name)
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws autoscaling describe-launch-configurations"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['LaunchConfigurations'].each do |i|
+                if i.LaunchConfigurationName.include? name
+                    lcs.push(i.LaunchConfigurationName)
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if lcs.count == 1 then
+            return lcs[0]
+        elsif lcs.count == 0 then
+            STDERR.puts 'Error: ' + name + ' LaunchConfiguration not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one LaunchConfiguration exists with that Name'
+        end
+    end
 end
