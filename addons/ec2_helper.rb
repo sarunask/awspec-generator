@@ -22,7 +22,7 @@ class EC2Helper
             resp = JSON.parse(%x[ #{cmd} ])
             resp['Reservations'].each do |i|
                 i['Instances'].each do |j|
-                    instances.push(i['InstanceId'])
+                    instances.push(j['InstanceId'])
                 end
             end
         end
@@ -130,8 +130,8 @@ class EC2Helper
             cmd = "aws autoscaling describe-auto-scaling-groups"
             resp = JSON.parse(%x[ #{cmd} ])
             resp['AutoScalingGroups'].each do |i|
-                i.Tags.each do |tag|
-                    if tag.Key == "Name" and tag.Value == name then
+                i['Tags'].each do |tag|
+                    if tag['Key'] == "Name" and tag['Value'] == name then
                         asgs.push(i['AutoScalingGroupName'])
                     end
                 end
@@ -160,9 +160,9 @@ class EC2Helper
         rescue IPAddr::InvalidAddressError
             cmd = "aws rds describe-db-instances"
             resp = JSON.parse(%x[ #{cmd} ])
-            resp['AutoScalingGroups'].each do |i|
-                if i.DBInstanceArn.include? name
-                    rds.push(i.DBInstanceIdentifier)
+            resp['DBInstances'].each do |i|
+                if i['DBInstanceArn'].include? name
+                    rds.push(i['DBInstanceIdentifier'])
                 end
             end
         end
@@ -190,8 +190,8 @@ class EC2Helper
             cmd = "aws autoscaling describe-launch-configurations"
             resp = JSON.parse(%x[ #{cmd} ])
             resp['LaunchConfigurations'].each do |i|
-                if i.LaunchConfigurationName.include? name
-                    lcs.push(i.LaunchConfigurationName)
+                if i['LaunchConfigurationName'].include? name
+                    lcs.push(i['LaunchConfigurationName'])
                 end
             end
         end
