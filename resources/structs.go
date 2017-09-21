@@ -44,7 +44,7 @@ func (t *SG_rule) String(dependencies *map[int]*Resource) (ret string) {
 			//Search in dependencies for name of this group
 			for _, dep := range *dependencies {
 				if dep.Type == SG {
-					id := GetAttributeByName(dep.Attrs, "id")
+					id := get_attribute_by_name(dep.Attrs, "id")
 					if id.String() == value {
 						for_cidr += fmt.Sprintf(".for('%v')", dep.Name)
 					}

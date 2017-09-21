@@ -46,6 +46,12 @@ const (
 	EC2_INSTANCE
 	//Route53 Record
 	ROUTE53_RECORD
+	//CloudWatch Alarm
+	CW_ALARM
+	//Lambda function
+	LAMBDA
+	//S3 bucket
+	S3_BUCKET
 )
 
 // String returns a string representation of the type.
@@ -81,6 +87,12 @@ func (t Type) String() string {
 		return "aws_instance"
 	case ROUTE53_RECORD:
 		return "aws_route53_record"
+	case CW_ALARM:
+		return "aws_cloudwatch_metric_alarm"
+	case LAMBDA:
+		return "aws_lambda_function"
+	case S3_BUCKET:
+		return "aws_s3_bucket"
 	}
 }
 
@@ -135,6 +147,12 @@ func (t Resource) String() string {
 		return t.aws_ec2_instance_spec()
 	case ROUTE53_RECORD:
 		return t.aws_route53_zone_record_spec()
+	case CW_ALARM:
+		return t.aws_cloudwatch_metric_alarm_spec()
+	case LAMBDA:
+		return t.aws_lambda_function_spec()
+	case S3_BUCKET:
+		return t.aws_s3_bucket_spec()
 	}
 }
 

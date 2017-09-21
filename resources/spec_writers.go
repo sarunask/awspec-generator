@@ -100,7 +100,7 @@ func (t Resource) aws_autoscaling_group_spec() string {
 }
 
 func (t Resource) aws_launch_configuration_spec() string {
-	name_prefix := GetAttributeByName(t.Attrs, "name_prefix")
+	name_prefix := get_attribute_by_name(t.Attrs, "name_prefix")
 
 	return fmt.Sprintf("require 'awspec'\n" +
 		"require 'ec2_helper'\n\n" +
@@ -158,12 +158,101 @@ func (t Resource) aws_route53_zone_record_spec() string {
 		"describe route53_hosted_zone('%v') do\n"+
 		"  it { should exist }\n" +
 		t.route53_attrs() +
-		"end\n", t.get_route53_zone_id())
+		"end\n", get_attribute_by_name(t.Attrs, "zone_id").String())
 }
 
-func (t Resource) get_route53_zone_id() (ret string) {
+func (t Resource) aws_cloudwatch_metric_alarm_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe cloudwatch_alarm(%v) do\n"+
+		"  it { should exist }\n" +
+		"  its(:metric_name) { should eq %v }\n" +
+		"  its(:alarm_description) { should eq %v }\n" +
+		"  its(:namespace) { should eq %v }\n" +
+		"  its(:actions_enabled) { should eq %v }\n" +
+		"  its(:comparison_operator) { should eq %v }\n" +
+		"  its(:threshold) { should eq %v }\n" +
+		"  its(:evaluation_periods) { should eq %v }\n" +
+		"  its(:unit) { should eq %v }\n" +
+		"  its(:period) { should eq %v }\n" +
+		"  its(:statistic) { should eq %v }\n" +
+		"  its(:extended_statistic) { should eq %v }\n" +
+		"  its(:evaluate_low_sample_count_percentile) { should eq %v }\n" +
+		"  its(:treat_missing_data) { should eq %v }\n" +
+		t.alarm_attrs() +
+		"end\n",
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"alarm_name").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"metric_name").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"alarm_description").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"namespace").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"actions_enabled").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"comparison_operator").String()),
+		get_attribute_by_name(t.Attrs,"threshold").Uint(),
+		get_attribute_by_name(t.Attrs,"evaluation_periods").Uint(),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"unit").String()),
+		get_attribute_by_name(t.Attrs,"period").Uint(),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"statistic").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"extended_statistic").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"evaluate_low_sample_count_percentiles").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"treat_missing_data").String()),
+			)
+}
+
+func (t Resource) aws_lambda_function_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe lambda(%v) do\n"+
+		"  it { should exist }\n" +
+		"  its(:runtime) { should eq %v }\n" +
+		"  its(:handler) { should eq %v }\n" +
+		"  its(:description) { should eq %v }\n" +
+		"  its(:timeout) { should eq %v }\n" +
+		"  its(:memory_size) { should eq %v }\n" +
+		t.lambda_attrs() +
+		"end\n",
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"function_name").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"runtime").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"handler").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"description").String()),
+		get_attribute_by_name(t.Attrs,"timeout").Uint(),
+		get_attribute_by_name(t.Attrs,"memory_size").Uint(),
+
+	)
+}
+
+func (t Resource) aws_s3_bucket_spec() string {
+	return fmt.Sprintf("require 'awspec'\n" +
+		"require 'ec2_helper'\n\n" +
+		"describe s3_bucket(%v) do\n"+
+		"  it { should exist }\n" +
+		"  its(:name) { should start_with(%v) }\n" +
+		t.tags() +
+		"end\n",
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"bucket").String()),
+		create_ruby_string(
+			get_attribute_by_name(t.Attrs,"bucket_prefix").String()),
+	)
+}
+
+func (t Resource) get_attribute(attr_name string) (ret string) {
 	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
-		if strings.EqualFold(key.String(), "zone_id") {
+		if strings.EqualFold(key.String(), attr_name) {
 			ret = value.String()
 			return false
 		}
@@ -219,7 +308,7 @@ func (t Resource) asg_dependencies() (ret string) {
 	for i := range t.Dependent {
 		switch t.Dependent[i].Type {
 		case LAUNCH_CONFIG:
-			name_prefix := GetAttributeByName(t.Dependent[i].Attrs, "name_prefix")
+			name_prefix := get_attribute_by_name(t.Dependent[i].Attrs, "name_prefix")
 			ret += fmt.Sprintf(
 				"  it { should have_launch_configuration(EC2Helper.GetLaunchConfigIdFromName('%v')) }\n",
 				name_prefix)
@@ -325,16 +414,8 @@ func get_elb_listener(arr *map[string]*ELB_Listener, id string) (ret *ELB_Listen
 	return
 }
 
-func append_array_when_regexp_match(reg *regexp.Regexp, arr *[]string, key string, val string) {
-	//This function would append to provided array of string (arr) val if key match Regexp reg
-	if reg.MatchString(key) {
-		*arr = append( *arr, val)
-	}
-}
-
 func (t Resource) elb_attrs() (eattrs string)  {
-	availability_zones_regexp := regexp.MustCompile(`^availability_zones.[0-9]+$`)
-	availability_zones := make([]string, 0)
+	availability_zones := get_list_items_by_pattern(t.Attrs, `^availability_zones\.[0-9]+$`)
 	healthcheck_pattern := regexp.MustCompile(`^health_check\.([0-9]+)\.(.+)$`)
 	healthchecks := make(map[string]*ELB_HealthCheck, 10)
 	listener_pattern := regexp.MustCompile(`^listener\.([0-9]+)\.(.+)$`)
@@ -343,7 +424,6 @@ func (t Resource) elb_attrs() (eattrs string)  {
 		key_string := key.String()
 		value_string := value.String()
 		value_int64 := value.Int()
-		append_array_when_regexp_match(availability_zones_regexp, &availability_zones, key_string, value_string)
 		if healthcheck_pattern.MatchString(key_string) {
 			pattern_matches := healthcheck_pattern.FindStringSubmatch(key_string)
 			healthcheck := get_elb_healthcheck(&healthchecks, pattern_matches[1])
@@ -379,11 +459,7 @@ func (t Resource) elb_attrs() (eattrs string)  {
 		}
 		return true
 	})
-	availability_zones_str := ""
-	for _, value := range availability_zones {
-		availability_zones_str += fmt.Sprintf("'%v',", value)
-	}
-	eattrs += fmt.Sprintf("  its(:availability_zones) { should == [%v] }\n", availability_zones_str)
+	eattrs += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should == [%v] }\n")
 	for _, val := range healthchecks {
 		eattrs += val.String()
 	}
@@ -395,19 +471,13 @@ func (t Resource) elb_attrs() (eattrs string)  {
 
 func (t Resource) asg_attrs() (ret string)  {
 	//AutoScallingGroups attributes
-	availability_zones_regexp := regexp.MustCompile(`^availability_zones.[0-9]+$`)
-	availability_zones := make([]string, 0)
-	elbs_regexp := regexp.MustCompile(`^load_balancers.[0-9]+$`)
-	elbs := make([]string, 0)
-	termination_policies_regexp := regexp.MustCompile(`^termination_policies.[0-9]+$`)
-	termination_policies := make([]string, 0)
+	availability_zones := get_list_items_by_pattern(t.Attrs, `^availability_zones\.[0-9]+$`)
+	elbs := get_list_items_by_pattern(t.Attrs, `^load_balancers\.[0-9]+$`)
+	termination_policies := get_list_items_by_pattern(t.Attrs, `^termination_policies\.[0-9]+$`)
 
 	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
 		key_string := key.String()
 		value_string := value.String()
-		append_array_when_regexp_match(availability_zones_regexp, &availability_zones, key_string, value_string)
-		append_array_when_regexp_match(elbs_regexp, &elbs, key_string, value_string)
-		append_array_when_regexp_match(termination_policies_regexp, &termination_policies, key_string, value_string)
 		switch strings.ToLower(key_string) {
 		case "name_prefix":
 			ret += fmt.Sprintf("  its(:auto_scaling_group_name) { should start_with('%v')}\n",
@@ -444,25 +514,9 @@ func (t Resource) asg_attrs() (ret string)  {
 
 		return true
 	})
-	availability_zones_str := ""
-	for _, value := range availability_zones {
-		availability_zones_str += fmt.Sprintf("'%v',", value)
-	}
-	ret += fmt.Sprintf("  its(:availability_zones) { should == [%v] }\n",
-		availability_zones_str)
-	elbs_str := ""
-	for _, value := range elbs {
-		elbs_str += fmt.Sprintf("'%v',", value)
-	}
-	ret += fmt.Sprintf("  its(:load_balancer_names) { should == [%v] }\n",
-		elbs_str)
-	termination_policies_str := ""
-	for _, value := range termination_policies {
-		termination_policies_str += fmt.Sprintf("'%v',", value)
-	}
-	ret += fmt.Sprintf("  its(:termination_policies) { should == [%v] }\n",
-		termination_policies_str)
-
+	ret += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should == [%v] }\n")
+	ret += create_ruby_string_array(elbs, "  its(:load_balancer_names) { should == [%v] }\n")
+	ret += create_ruby_string_array(termination_policies, "  its(:termination_policies) { should == [%v] }\n")
 	return
 }
 
@@ -626,10 +680,47 @@ func (t Resource) route53_attrs() (ret string)  {
 
 func (t Resource) lc_attrs() (ret string)  {
 	//LaunchConfiguration attributes
-	ami_id := GetAttributeByName(t.Attrs, "image_id")
+	ami_id := get_attribute_by_name(t.Attrs, "image_id")
 	if ami_id.String() != "" {
 		ret += fmt.Sprintf("  its(:image_id) { should eq '%v' }\n", ami_id.String())
 	}
 	return
 }
 
+func (t Resource) alarm_attrs() (ret string) {
+	ok_actions := get_list_items_by_pattern(t.Attrs, `^ok_actions\.[0-9]+$`)
+	alarm_actions := get_list_items_by_pattern(t.Attrs, `^alarm_actions\.[0-9]+$`)
+	insufficient_data_actions := get_list_items_by_pattern(t.Attrs, `^insufficient_data_actions\.[0-9]+$`)
+	ret += create_ruby_string_array(ok_actions, "  its(:ok_actions) { should == [%v]}\n")
+	ret += create_ruby_string_array(alarm_actions, "  its(:alarm_actions) { should == [%v]}\n")
+	ret += create_ruby_string_array(insufficient_data_actions, "  its(:insufficient_data_actions) { should == [%v]}\n")
+	return
+}
+
+func (t Resource) lambda_attrs() (ret string) {
+	env_vars_pattern := regexp.MustCompile(`^environment\.[0-9]+\.variables\.([^%]+)$`)
+	env_vars := make(map[string]string)
+	security_groups := get_list_items_by_pattern(t.Attrs, `^vpc_config\.[0-9]+\.security_group_ids\.([^#]+)$`)
+	subnet_ids := get_list_items_by_pattern(t.Attrs, `^vpc_config\.[0-9]+\.subnet_ids\.([^#]+)$`)
+	vpc_ids := get_list_items_by_pattern(t.Attrs, `^vpc_config\.[0-9]+\.vpc_id$`)
+	(*t.Attrs).ForEach(func(key, value gjson.Result) bool {
+		key_string := key.String()
+		value_string := value.String()
+		if env_vars_pattern.MatchString(key_string) {
+			pattern_matches := env_vars_pattern.FindStringSubmatch(key_string)
+			env_vars[pattern_matches[1]] = value_string
+		}
+		return true
+	})
+	ret = fmt.Sprintf(
+		"  its(:environment) { should eq Aws::Lambda::Types::EnvironmentResponse.new({variables: %v }) }\n",
+		create_ruby_hash(&env_vars))
+	ret += fmt.Sprintf(
+		"  its(:vpc_config) { should eq Aws::Lambda::Types::VpcConfigResponse.new({'subnet_ids'=>%v, " +
+			"'security_group_ids'=>%v, 'vpc_id'=>'%v'}) }\n",
+		create_ruby_array(subnet_ids),
+		create_ruby_array(security_groups),
+		(*vpc_ids)[0],
+			)
+	return
+}
