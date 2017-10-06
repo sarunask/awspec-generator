@@ -176,6 +176,36 @@ class EC2Helper
             return rds[0]
         end
     end
+    def self.GetRDSEndPointFromName(name)
+        rds = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        rds_client = Aws::RDS::Client.new()
+        begin
+            resp = rds_client.describe_db_instances()
+            resp.db_instances.each do |i|
+                if i.db_instance_arn.include? name
+                    rds.push(i.endpoint.address)
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws rds describe-db-instances"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['DBInstances'].each do |i|
+                if i['DBInstanceArn'].include? name
+                    rds.push(i['Endpoint']['Address'])
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if rds.count == 1 then
+            return rds[0]
+        elsif rds.count == 0 then
+            STDERR.puts 'Error: ' + name + ' RDS DB instance not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one RDS DB instance exists with that Name. Using First one.'
+            return rds[0]
+        end
+    end
     def self.GetLaunchConfigIdFromName(name)
         lcs = Array.new
         # Filter the ec2 instances for name and state pending or running
