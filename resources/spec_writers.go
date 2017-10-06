@@ -459,7 +459,7 @@ func (t Resource) elb_attrs() (eattrs string)  {
 		}
 		return true
 	})
-	eattrs += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should == [%v] }\n")
+	eattrs += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should =~ [%v] }\n")
 	for _, val := range healthchecks {
 		eattrs += val.String()
 	}
@@ -514,9 +514,9 @@ func (t Resource) asg_attrs() (ret string)  {
 
 		return true
 	})
-	ret += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should == [%v] }\n")
-	ret += create_ruby_string_array(elbs, "  its(:load_balancer_names) { should == [%v] }\n")
-	ret += create_ruby_string_array(termination_policies, "  its(:termination_policies) { should == [%v] }\n")
+	ret += create_ruby_string_array(availability_zones, "  its(:availability_zones) { should =~ [%v] }\n")
+	ret += create_ruby_string_array(elbs, "  its(:load_balancer_names) { should =~ [%v] }\n")
+	ret += create_ruby_string_array(termination_policies, "  its(:termination_policies) { should =~ [%v] }\n")
 	return
 }
 
@@ -691,9 +691,9 @@ func (t Resource) alarm_attrs() (ret string) {
 	ok_actions := get_list_items_by_pattern(t.Attrs, `^ok_actions\.[0-9]+$`)
 	alarm_actions := get_list_items_by_pattern(t.Attrs, `^alarm_actions\.[0-9]+$`)
 	insufficient_data_actions := get_list_items_by_pattern(t.Attrs, `^insufficient_data_actions\.[0-9]+$`)
-	ret += create_ruby_string_array(ok_actions, "  its(:ok_actions) { should == [%v]}\n")
-	ret += create_ruby_string_array(alarm_actions, "  its(:alarm_actions) { should == [%v]}\n")
-	ret += create_ruby_string_array(insufficient_data_actions, "  its(:insufficient_data_actions) { should == [%v]}\n")
+	ret += create_ruby_string_array(ok_actions, "  its(:ok_actions) { should =~ [%v]}\n")
+	ret += create_ruby_string_array(alarm_actions, "  its(:alarm_actions) { should =~ [%v]}\n")
+	ret += create_ruby_string_array(insufficient_data_actions, "  its(:insufficient_data_actions) { should =~ [%v]}\n")
 	return
 }
 

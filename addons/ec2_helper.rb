@@ -172,7 +172,8 @@ class EC2Helper
         elsif rds.count == 0 then
             STDERR.puts 'Error: ' + name + ' RDS DB instance not found'
         else
-            STDERR.puts 'Error: ' + name + ' more than one RDS DB instance exists with that Name'
+            STDERR.puts 'Error: ' + name + ' more than one RDS DB instance exists with that Name. Using First one.'
+            return rds[0]
         end
     end
     def self.GetLaunchConfigIdFromName(name)
@@ -201,7 +202,8 @@ class EC2Helper
         elsif lcs.count == 0 then
             STDERR.puts 'Error: ' + name + ' LaunchConfiguration not found'
         else
-            STDERR.puts 'Error: ' + name + ' more than one LaunchConfiguration exists with that Name'
+            STDERR.puts 'Error: ' + name + ' more than one LaunchConfiguration exists with that Name. Returning First One.'
+            return lcs[0]
         end
     end
 end
