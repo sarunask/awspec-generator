@@ -236,4 +236,83 @@ class EC2Helper
             return lcs[0]
         end
     end
+    def self.GetIAMRoleWhichBeginsWith(name)
+        roles = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        iam_client = Aws::IAM::Client.new()
+        begin
+            resp = iam_client.list_roles({:max_items => 100})
+            resp.roles.each do |i|
+                if i.role_name.include? name
+                    roles.push(i.role_id)
+                end
+            end
+            while resp.is_truncated and roles.count == 0
+                resp = iam_client.list_roles({:max_items => 100,
+                    :marker => resp.marker})
+                resp.roles.each do |i|
+                    if i.role_name.include? name
+                        roles.push(i.role_id)
+                    end
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = 'aws iam list-roles --max-items 100'
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['Roles'].each do |i|
+                if i['RoleName'].include? name
+                    roles.push(i['LaunchConfigurationName'])
+                end
+            end
+            while resp['IsTruncated'] and roles.count == 0
+                cmd = "aws iam list-roles --max-items 100 --marker #{resp['Marker']}"
+                resp = JSON.parse(%x[ #{cmd} ])
+                resp['Roles'].each do |i|
+                    if i['RoleName'].include? name
+                        roles.push(i['LaunchConfigurationName'])
+                    end
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if roles.count == 1 then
+            return roles[0]
+        elsif roles.count == 0 then
+            STDERR.puts 'Error: ' + name + ' Roles not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one Roles exists with that Name. Returning First One.'
+            return roles[0]
+        end
+    end
+    def self.GetS3BucketIdFromName(bucket_name)
+        buckets = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        s3_client = Aws::S3::Client.new()
+        begin
+            resp = s3_client.list_buckets()
+            resp.buckets.each do |i|
+                if i.name.include? bucket_name
+                    buckets.push(i.name)
+                end
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws s3 list-buckets"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['Buckets'].each do |i|
+                if i['Name'].include? bucket_name
+                    lcs.push(i['Name'])
+                end
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if buckets.count == 1 then
+            return buckets[0]
+        elsif buckets.count == 0 then
+            STDERR.puts 'Error: ' + bucket_name + ' S3 bucket not found'
+        else
+            STDERR.puts 'Error: ' + bucket_name + ' more than one S3 Bucket exists with that Name. Returning First One.'
+            return buckets[0]
+        end
+    end
+
 end
