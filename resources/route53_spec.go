@@ -53,11 +53,16 @@ func (t Resource) route53_attrs() (ret string)  {
 	})
 	records_str := ""
 	if len(records) != 0 {
-		records_str += fmt.Sprintf("%v(", record_type)
-		for _, value := range records {
-			records_str += fmt.Sprintf("'%v' ", value)
+		if strings.EqualFold(record_type, "A") {
+			records_str += fmt.Sprintf("a(EC2Helper::GetRoute53AFromZoneAndName('%v', '%v.'))",
+				get_attribute_by_name(t.Attrs, "zone_id").String(), fqdn)
+		} else {
+			records_str += fmt.Sprintf("%v(", record_type)
+			for _, value := range records {
+				records_str += fmt.Sprintf("'%v' ", value)
+			}
+			records_str += ")"
 		}
-		records_str += ")"
 	}
 	if len(alias_arr) != 0 {
 		for _, val := range alias_arr {

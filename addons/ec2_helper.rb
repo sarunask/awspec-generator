@@ -314,5 +314,35 @@ class EC2Helper
             return buckets[0]
         end
     end
-
+    def self.GetRoute53AFromZoneAndName(zone, name)
+        a_records = Array.new
+        # Filter the ec2 instances for name and state pending or running
+        route53 = Aws::Route53::Client.new()
+        begin
+            resp = route53.list_resource_record_sets({
+                hosted_zone_id: zone,
+                start_record_name: name,
+                start_record_type: "A",
+                max_items: 1
+                })
+            resp.resource_record_sets.each do |i|
+                a_records.push(i.resource_records[0].value)
+            end
+        rescue IPAddr::InvalidAddressError
+            cmd = "aws route53 list-resource-record-sets --hosted-zone-id #{zone} --start-record-name #{name} --start-record-type A --max-items 1"
+            resp = JSON.parse(%x[ #{cmd} ])
+            resp['ResourceRecordSets'].each do |i|
+                a_records.push(i['ResourceRecords'][0]['Value'])
+            end
+        end
+        # If we found a single vpn_gw_id return it, otherwise throw an error.
+        if a_records.count == 1 then
+            return a_records[0]
+        elsif a_records.count == 0 then
+            STDERR.puts 'Error: ' + name + ' Route53 A record not found'
+        else
+            STDERR.puts 'Error: ' + name + ' more than one Route53 A Records exists with that Name'
+            return a_records[0]
+        end
+    end
 end
